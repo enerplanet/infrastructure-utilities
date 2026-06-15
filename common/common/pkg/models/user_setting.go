@@ -13,7 +13,6 @@ type UserSetting struct {
 	PrivacyAccepted         bool `json:"privacy_accepted" gorm:"default:false"`
 	ProductTourCompleted    bool `json:"product_tour_completed" gorm:"default:false"`
 	AreaSelectTourCompleted bool `json:"area_select_tour_completed" gorm:"default:false"`
-	ModelIntroCardDismissed bool `json:"model_intro_card_dismissed" gorm:"default:false"`
 	OnboardingCompleted     bool `json:"onboarding_completed" gorm:"default:false"`
 
 	MapLocation *string `json:"map_location,omitempty" gorm:"type:jsonb"`

@@ -20,6 +20,7 @@ type SessionData struct {
 	GroupID              string        `json:"group_id,omitempty"` // Primary group for managers
 	ProductTourCompleted bool          `json:"product_tour_completed"`
 	CreatedAt            time.Time     `json:"created_at"`
+	LastSeenAt           time.Time     `json:"last_seen_at,omitempty"`
 }
 
 type SessionStore interface {
@@ -33,4 +34,7 @@ type SessionStore interface {
 	RefreshSessionTTL(ctx context.Context, userID string) error
 	// CountActiveSessions returns the number of active sessions in the store.
 	CountActiveSessions(ctx context.Context) (int64, error)
+	// CountActiveUsers returns the number of distinct users with recent session activity.
+	// When userIDs are provided, only those users are counted.
+	CountActiveUsers(ctx context.Context, userIDs ...string) (int64, error)
 }

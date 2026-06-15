@@ -4,14 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"platform.local/platform/session"
+	"strings"
 	"time"
+
+	"platform.local/platform/session"
 
 	goredis "github.com/redis/go-redis/v9"
 )
 
 const (
 	MaxSessionLifetime = 8 * time.Hour
+	onlineUserWindow   = 10 * time.Minute
 )
 
 type RedisSessionManager struct {
@@ -39,6 +42,10 @@ func (s *RedisSessionManager) buildUserSessionsKey(userID string) string {
 	return fmt.Sprintf("user_sessions:%s", userID)
 }
 
+func (s *RedisSessionManager) buildSessionActivityKey(sessionID string) string {
+	return fmt.Sprintf("session_activity:%s", sessionID)
+}
+
 // SaveSession stores session data in Redis
 func (s *RedisSessionManager) SaveSession(ctx context.Context,
 	userID string,
@@ -47,20 +54,22 @@ func (s *RedisSessionManager) SaveSession(ctx context.Context,
 	// Here userID is actually the sessionID which we use as the Redis key suffix
 	sessionID := userID
 	key := s.buildKey(sessionID)
+	now := time.Now()
 
 	exists, err := s.client.Exists(ctx, key).Result()
 	if err == nil && exists == 0 {
 		if session.CreatedAt.IsZero() {
-			session.CreatedAt = time.Now()
+			session.CreatedAt = now
 		}
 	} else {
 		existingSession, err := s.GetSession(ctx, userID)
 		if err == nil && existingSession != nil && !existingSession.CreatedAt.IsZero() {
 			session.CreatedAt = existingSession.CreatedAt
 		} else if session.CreatedAt.IsZero() {
-			session.CreatedAt = time.Now()
+			session.CreatedAt = now
 		}
 	}
+	session.LastSeenAt = now
 
 	jsonData, err := json.Marshal(session)
 	if err != nil {
@@ -70,6 +79,10 @@ func (s *RedisSessionManager) SaveSession(ctx context.Context,
 	err = s.client.SetEx(ctx, key, string(jsonData), s.defaultTTL).Err()
 	if err != nil {
 		return fmt.Errorf("error saving session to redis: %w", err)
+	}
+
+	if err := s.saveSessionActivity(ctx, sessionID, now); err != nil {
+		return err
 	}
 
 	// Maintain reverse index: user -> session IDs
@@ -118,6 +131,7 @@ func (s *RedisSessionManager) DeleteSession(ctx context.Context, userID string) 
 	if err := s.client.Del(ctx, key).Err(); err != nil {
 		return fmt.Errorf("error deleting session from redis: %w", err)
 	}
+	_ = s.client.Del(ctx, s.buildSessionActivityKey(sessionID)).Err()
 
 	if sess != nil && sess.UserID != "" {
 		setKey := s.buildUserSessionsKey(sess.UserID)
@@ -171,6 +185,9 @@ func (s *RedisSessionManager) RefreshSessionTTL(ctx context.Context, userID stri
 	if err != nil {
 		return fmt.Errorf("error refreshing session TTL: %w", err)
 	}
+	if err := s.saveSessionActivity(ctx, sessionID, time.Now()); err != nil {
+		return err
+	}
 
 	// Also bump the TTL on the reverse index set
 	if session.UserID != "" {
@@ -192,6 +209,7 @@ func (s *RedisSessionManager) DeleteSessionsByUser(ctx context.Context, userID s
 	for _, sid := range sessionIDs {
 		key := s.buildKey(sid)
 		_ = s.client.Del(ctx, key).Err()
+		_ = s.client.Del(ctx, s.buildSessionActivityKey(sid)).Err()
 	}
 	// Remove the set mapping
 	_ = s.client.Del(ctx, setKey).Err()
@@ -215,4 +233,147 @@ func (s *RedisSessionManager) CountActiveSessions(ctx context.Context) (int64, e
 		}
 	}
 	return count, nil
+}
+
+// CountActiveUsers counts distinct users with recent session activity.
+func (s *RedisSessionManager) CountActiveUsers(ctx context.Context, userIDs ...string) (int64, error) {
+	activeUsers := make(map[string]struct{})
+	allowedUsers := userFilter(userIDs)
+	var cursor uint64
+	pattern := fmt.Sprintf("%s:*", s.PrefixState)
+	now := time.Now()
+
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return 0, fmt.Errorf("error scanning sessions: %w", err)
+		}
+
+		if len(keys) > 0 {
+			values, activityValues, err := s.loadSessionValues(ctx, keys)
+			if err != nil {
+				return 0, err
+			}
+			countActiveUsersFromValues(values, activityValues, now, allowedUsers, activeUsers)
+		}
+
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+
+	return int64(len(activeUsers)), nil
+}
+
+func (s *RedisSessionManager) loadSessionValues(ctx context.Context, keys []string) ([]interface{}, []interface{}, error) {
+	values, err := s.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading sessions: %w", err)
+	}
+
+	activityKeys := make([]string, 0, len(keys))
+	prefix := s.PrefixState + ":"
+	for _, key := range keys {
+		sessionID := strings.TrimPrefix(key, prefix)
+		activityKeys = append(activityKeys, s.buildSessionActivityKey(sessionID))
+	}
+
+	activityValues, err := s.client.MGet(ctx, activityKeys...).Result()
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading session activity: %w", err)
+	}
+
+	return values, activityValues, nil
+}
+
+func countActiveUsersFromValues(values, activityValues []interface{}, now time.Time, allowedUsers, activeUsers map[string]struct{}) {
+	for i, value := range values {
+		raw, ok := sessionJSON(value)
+		if !ok {
+			continue
+		}
+
+		var sessionData session.SessionData
+		if err := json.Unmarshal(raw, &sessionData); err != nil {
+			continue
+		}
+
+		var activityValue interface{}
+		if i < len(activityValues) {
+			activityValue = activityValues[i]
+		}
+
+		if isRecentlyActiveUserSession(sessionData, sessionActivityTime(activityValue), now, allowedUsers) {
+			activeUsers[sessionData.UserID] = struct{}{}
+		}
+	}
+}
+
+func userFilter(userIDs []string) map[string]struct{} {
+	if len(userIDs) == 0 {
+		return nil
+	}
+
+	filter := make(map[string]struct{}, len(userIDs))
+	for _, userID := range userIDs {
+		if userID != "" {
+			filter[userID] = struct{}{}
+		}
+	}
+	return filter
+}
+
+func sessionJSON(value interface{}) ([]byte, bool) {
+	switch v := value.(type) {
+	case string:
+		return []byte(v), true
+	case []byte:
+		return v, true
+	default:
+		return nil, false
+	}
+}
+
+func sessionActivityTime(value interface{}) time.Time {
+	raw, ok := sessionJSON(value)
+	if !ok {
+		return time.Time{}
+	}
+
+	activityTime, err := time.Parse(time.RFC3339Nano, string(raw))
+	if err != nil {
+		return time.Time{}
+	}
+	return activityTime
+}
+
+func isRecentlyActiveUserSession(sessionData session.SessionData, activityTime time.Time, now time.Time, allowedUsers map[string]struct{}) bool {
+	if sessionData.UserID == "" {
+		return false
+	}
+	if allowedUsers != nil {
+		if _, ok := allowedUsers[sessionData.UserID]; !ok {
+			return false
+		}
+	}
+
+	lastSeen := activityTime
+	if lastSeen.IsZero() {
+		lastSeen = sessionData.LastSeenAt
+	}
+	if lastSeen.IsZero() {
+		lastSeen = sessionData.CreatedAt
+	}
+
+	return !lastSeen.IsZero() && !lastSeen.Before(now.Add(-onlineUserWindow))
+}
+
+func (s *RedisSessionManager) saveSessionActivity(ctx context.Context, sessionID string, seenAt time.Time) error {
+	key := s.buildSessionActivityKey(sessionID)
+	value := seenAt.UTC().Format(time.RFC3339Nano)
+	if err := s.client.SetEx(ctx, key, value, s.defaultTTL).Err(); err != nil {
+		return fmt.Errorf("error saving session activity: %w", err)
+	}
+	return nil
 }
