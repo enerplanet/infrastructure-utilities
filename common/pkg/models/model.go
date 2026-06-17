@@ -45,6 +45,12 @@ type Model struct {
 	ParentModel   *Model `gorm:"foreignKey:ParentModelID" json:"parent_model,omitempty"`
 	IsCopy        bool   `gorm:"default:false" json:"is_copy"`
 
+
+	ChildModelIDs []uint `gorm:"-" json:"child_model_ids,omitempty"`
+
+
+	ParentModelTitle *string `gorm:"-" json:"parent_model_title,omitempty"`
+
 	IsActive bool `gorm:"default:false" json:"is_active"`
 
 	CalculationStartedAt   *time.Time `json:"calculation_started_at,omitempty"`
