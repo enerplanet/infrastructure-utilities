@@ -74,19 +74,10 @@ func ValidatePasswordMatch(password, confirmation string) *PasswordValidationErr
 }
 
 func IsPasswordWeak(password string) (bool, string) {
-	password = strings.ToLower(password)
-
-	weakPasswords := []string{
-		"password", "12345678", "qwerty", "abc123", "letmein",
-		"welcome", "monkey", "123456789", "password123", "admin",
+	weakPasswordRegex := regexp.MustCompile(`^.*(?=.{8,})(?=.*[a-zA-Z])(?=.*[\d\W]).*$`)
+	if !weakPasswordRegex.MatchString(password) {
+		return true, "password does not meet minimum strength requirements (min 8 characters, at least one letter and one number or special character)"
 	}
-
-	for _, weak := range weakPasswords {
-		if strings.Contains(password, weak) {
-			return true, "password contains a common weak pattern"
-		}
-	}
-
 	for i := 0; i < len(password)-2; i++ {
 		if password[i] == password[i+1] && password[i+1] == password[i+2] {
 			return true, "password contains too many repeated characters"
