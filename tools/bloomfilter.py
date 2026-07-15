@@ -154,7 +154,7 @@ if __name__ == "__main__":
     # Custom guesswords: all pairwise combinations are generated and merged
     # into the filter. Add words that users commonly combine in passwords.
     CUSTOM_GUESSWORDS = [
-        "admin", "password", "welcome",
+        "admin", "password", "welcome", "EnerPlanet", "EnerPlanet", "Ener", "Planet"
         "123", "abc", "test", "guest", "user", "enerplanet", "ener", "planet",
         "pass", "key", "login", "secure", "demo",
     ]
