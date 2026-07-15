@@ -13,8 +13,8 @@ import (
 var bloomFilterData []byte
 
 const (
-	// MinPasswordLength is the minimum allowed password length per NIST SP 800-63B (2026).
-	MinPasswordLength = 8
+	// MinPasswordLength is the minimum allowed password length per NIST SP 800-63B is 8, increased to 10 for ICO (2026).
+	MinPasswordLength = 10
 	// MaxPasswordLength is the maximum allowed password length per NIST SP 800-63B (2026).
 	// NIST recommends supporting at least 64 characters.
 	MaxPasswordLength = 128
@@ -104,9 +104,9 @@ func isCompromised(password string) bool {
 	return true
 }
 
-// ValidatePassword checks whether the given password meets NIST SP 800-63B (2026)
+// ValidatePassword checks whether the given password meets NIST SP 800-63B (2026) and ICO
 // recommendations:
-//   - Minimum 8 characters
+//   - Minimum 10 characters
 //   - Maximum 128 characters (NIST recommends supporting at least 64)
 //   - No composition rules (no required uppercase, lowercase, digits, or special chars)
 //   - Checked against a bloom filter of known compromised passwords
@@ -166,8 +166,6 @@ func ValidatePasswordMatch(password, confirmation string) *PasswordValidationErr
 // IsPasswordWeak checks a password against the bloom filter of known compromised
 // passwords. Returns true along with a reason if the password appears in the
 // compromised password list.
-//
-// This replaces the old sequential/repeated character checks with a NIST SP 800-63B
 // (2026) compliant approach: the only weakness check is whether the password
 // has been previously exposed in a known breach.
 func IsPasswordWeak(password string) (bool, string) {

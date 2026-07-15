@@ -160,7 +160,7 @@ if __name__ == "__main__":
     ]
 
     generator = UnifiedBloomGenerator(
-        min_length=8,      # Your requested minimum length filter
+        min_length=10,      # Your requested minimum length filter
         fp_rate=0.01       # Target false-positive rate (1%)
     )
 
