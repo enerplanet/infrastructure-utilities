@@ -2,7 +2,9 @@ import math
 import hashlib
 import urllib.request
 import os
-from typing import List
+import random
+from typing import List, Optional
+from itertools import permutations
 
 class UnifiedBloomGenerator:
     def __init__(self, min_length: int = 8, fp_rate: float = 0.01):
@@ -35,7 +37,22 @@ class UnifiedBloomGenerator:
         for i in range(k):
             yield (hash_a + i * hash_b) % m
 
-    def process(self, source: str, txt_output: str, bin_output: str):
+    def _generate_compound_guesswords(self, guesswords: List[str]) -> List[str]:
+        """Generate all pairwise combinations of guesswords (e.g. hello+world, world+hello)."""
+        if len(guesswords) < 2:
+            return []
+
+        combined = set()
+        for a, b in permutations(guesswords, 2):
+            candidate = a + b
+            if len(candidate) >= self.min_length:
+                combined.add(candidate)
+
+        result = sorted(combined)
+        print(f"Generated {len(result):,} compound guesswords from {len(guesswords)} base words.")
+        return result
+
+    def process(self, source: str, export_txt: bool,txt_output: str, bin_output: str, custom_guesswords: Optional[List[str]] = None):
         # 1. Load and filter the raw passwords
         raw_lines = self._load_raw_passwords(source)
 
@@ -48,6 +65,18 @@ class UnifiedBloomGenerator:
                 seen.add(cleaned)
                 filtered_passwords.append(cleaned)
 
+        # 1b. Merge custom compound guesswords into the filtered list
+        if custom_guesswords:
+            compounds = self._generate_compound_guesswords(custom_guesswords)
+            added = 0
+            for pw in compounds:
+                if pw not in seen:
+                    seen.add(pw)
+                    filtered_passwords.append(pw)
+                    added += 1
+            if added:
+                print(f"Merged {added} additional compound guesswords into the filter list.")
+
         n = len(filtered_passwords)
         print(f"Found {len(raw_lines):,} raw entries -> Filtered down to {n:,} unique passwords (>= {self.min_length} chars).")
 
@@ -55,11 +84,12 @@ class UnifiedBloomGenerator:
             print("No passwords matched the criteria. Aborting export.")
             return
 
-        # 2. Export the filtered text list
-        print(f"Saving filtered text list to '{txt_output}'...")
-        with open(txt_output, "w", encoding="utf-8") as f:
-            for pw in filtered_passwords:
-                f.write(pw + "\n")
+        # 2. Export the filtered text list (optional, bin is always exported)
+        if export_txt:
+            print(f"Saving filtered text list to '{txt_output}'...")
+            with open(txt_output, "w", encoding="utf-8") as f:
+                for pw in filtered_passwords:
+                    f.write(pw + "\n")
 
         # 3. Compute optimal Bloom Filter parameters dynamically
         # m = - (n * ln(p)) / (ln(2)^2)
@@ -91,13 +121,43 @@ class UnifiedBloomGenerator:
             f.write(k.to_bytes(1, byteorder='big'))
             f.write(bit_array)
 
+        # 6. Self-test: verify the filter catches a random sample
+        self._self_test(filtered_passwords, m, k, bit_array)
+
         print("Success! Process completed.")
+
+    def _self_test(self, passwords: List[str], m: int, k: int, bit_array: bytearray):
+        """Pick 50 random passwords and verify they all pass the bloom filter."""
+        sample_size = min(50, len(passwords))
+        sample = random.sample(passwords, sample_size)
+
+        misses = 0
+        for pw in sample:
+            for bit_index in self._get_hashes(pw, m, k):
+                byte_idx = bit_index // 8
+                bit_pos = bit_index % 8
+                if not (bit_array[byte_idx] & (1 << bit_pos)):
+                    misses += 1
+                    break
+
+        if misses == 0:
+            print(f"Self-test passed: all {sample_size} sampled passwords found in the filter.")
+        else:
+            print(f"Self-test WARNING: {misses}/{sample_size} sampled passwords were NOT found in the filter.")
 
 
 # --- How to Run It ---
 if __name__ == "__main__":
     # Feel free to change this to a local path (e.g., "my_passwords.txt")
     DEFAULT_SOURCE = "https://raw.githubusercontent.com/danielmiessler/SecLists/master/Passwords/Common-Credentials/100k-most-used-passwords-NCSC.txt"
+
+    # Custom guesswords: all pairwise combinations are generated and merged
+    # into the filter. Add words that users commonly combine in passwords.
+    CUSTOM_GUESSWORDS = [
+        "admin", "password", "welcome",
+        "123", "abc", "test", "guest", "user", "enerplanet", "ener", "planet",
+        "pass", "key", "login", "secure", "demo",
+    ]
 
     generator = UnifiedBloomGenerator(
         min_length=8,      # Your requested minimum length filter
@@ -106,6 +166,8 @@ if __name__ == "__main__":
 
     generator.process(
         source=DEFAULT_SOURCE,
+        export_txt=False,
         txt_output="ncsc_8plus_focused.txt",
-        bin_output="../common/pkg/utils/password_filter.bin"
+        bin_output="../common/pkg/utils/password_filter.bin",
+        custom_guesswords=CUSTOM_GUESSWORDS,
     )
