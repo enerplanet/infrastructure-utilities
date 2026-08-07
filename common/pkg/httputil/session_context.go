@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const sessionIDCookieName = "session_id"
+
 // GetSessionFromContext retrieves session data from context (set by auth middleware)
 func GetSessionFromContext(c *gin.Context) (*platformsession.SessionData, bool) {
 	sessionData, exists := c.Get("session_data")
@@ -35,13 +37,32 @@ func GetSessionOrAbort(c *gin.Context, _ interface{}) (*platformsession.SessionD
 
 // GetSessionCookie retrieves the session_id cookie from the request
 func GetSessionCookie(c *gin.Context) (string, error) {
-	return c.Cookie("session_id")
+	values := GetSessionCookieValues(c)
+	if len(values) == 0 {
+		return "", http.ErrNoCookie
+	}
+	return values[len(values)-1], nil
 }
 
 // GetSessionCookieOrEmpty retrieves the session_id cookie, returns empty string if not found
 func GetSessionCookieOrEmpty(c *gin.Context) string {
-	sessionID, _ := c.Cookie("session_id")
+	sessionID, _ := GetSessionCookie(c)
 	return sessionID
+}
+
+// GetSessionCookieValues returns every session_id cookie value in browser order.
+func GetSessionCookieValues(c *gin.Context) []string {
+	if c == nil || c.Request == nil {
+		return nil
+	}
+
+	values := make([]string, 0, 1)
+	for _, cookie := range c.Request.Cookies() {
+		if cookie.Name == sessionIDCookieName && cookie.Value != "" {
+			values = append(values, cookie.Value)
+		}
+	}
+	return values
 }
 
 // SetSessionContext sets user data in gin context from session data

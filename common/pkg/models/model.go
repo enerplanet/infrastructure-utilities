@@ -1,3 +1,4 @@
+// Package models holds the platform schema shared by all SpatialHub apps; app-specific entities live in each app's backend.
 package models
 
 import (
@@ -5,6 +6,8 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+
+	"platform.local/common/pkg/contracts"
 )
 
 type Model struct {
@@ -42,6 +45,12 @@ type Model struct {
 	ParentModel   *Model `gorm:"foreignKey:ParentModelID" json:"parent_model,omitempty"`
 	IsCopy        bool   `gorm:"default:false" json:"is_copy"`
 
+
+	ChildModelIDs []uint `gorm:"-" json:"child_model_ids,omitempty"`
+
+
+	ParentModelTitle *string `gorm:"-" json:"parent_model_title,omitempty"`
+
 	IsActive bool `gorm:"default:false" json:"is_active"`
 
 	CalculationStartedAt   *time.Time `json:"calculation_started_at,omitempty"`
@@ -55,16 +64,16 @@ type Model struct {
 	DeletedAt *gorm.DeletedAt `gorm:"index" json:"deleted_at,omitempty"`
 }
 
-// Model status constants
+// Model status constants, re-exported from the contracts package.
 const (
-	ModelStatusDraft      = "draft"
-	ModelStatusQueue      = "queue"
-	ModelStatusRunning    = "running"
-	ModelStatusProcessing = "processing"
-	ModelStatusCompleted  = "completed"
-	ModelStatusPublished  = "published"
-	ModelStatusFailed     = "failed"
-	ModelStatusCancelled  = "cancelled"
+	ModelStatusDraft      = contracts.StatusDraft
+	ModelStatusQueue      = contracts.StatusQueue
+	ModelStatusRunning    = contracts.StatusRunning
+	ModelStatusProcessing = contracts.StatusProcessing
+	ModelStatusCompleted  = contracts.StatusCompleted
+	ModelStatusPublished  = contracts.StatusPublished
+	ModelStatusFailed     = contracts.StatusFailed
+	ModelStatusCancelled  = contracts.StatusCancelled
 )
 
 func (Model) TableName() string {
@@ -171,16 +180,17 @@ type ModelResult struct {
 	Model *Model `gorm:"foreignKey:ModelID" json:"model,omitempty"`
 }
 
+// Result-processing statuses, re-exported from the contracts package.
 const (
-	ResultExtractionPending    = "pending"
-	ResultExtractionProcessing = "processing"
-	ResultExtractionCompleted  = "completed"
-	ResultExtractionFailed     = "failed"
+	ResultExtractionPending    = contracts.ResultExtractionPending
+	ResultExtractionProcessing = contracts.ResultExtractionProcessing
+	ResultExtractionCompleted  = contracts.ResultExtractionCompleted
+	ResultExtractionFailed     = contracts.ResultExtractionFailed
 
-	ResultGeoserverPending    = "pending"
-	ResultGeoserverProcessing = "processing"
-	ResultGeoserverConfigured = "configured"
-	ResultGeoserverFailed     = "failed"
+	ResultGeoserverPending    = contracts.ResultGeoserverPending
+	ResultGeoserverProcessing = contracts.ResultGeoserverProcessing
+	ResultGeoserverConfigured = contracts.ResultGeoserverConfigured
+	ResultGeoserverFailed     = contracts.ResultGeoserverFailed
 )
 
 func (ModelResult) TableName() string {

@@ -8,7 +8,6 @@ func SecurityHeaders() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("X-Frame-Options", "DENY")
-		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 
 		if c.Request.TLS != nil || c.Request.Header.Get("X-Forwarded-Proto") == "https" {
@@ -16,11 +15,11 @@ func SecurityHeaders() gin.HandlerFunc {
 		}
 
 		csp := "default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+			"script-src 'self' 'unsafe-inline'; " +
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: https: blob:; " +
 			"font-src 'self' data:; " +
-			"connect-src 'self' https://nominatim.openstreetmap.org https:; " +
+			"connect-src 'self' https://nominatim.openstreetmap.org https://basemaps.cartocdn.com https://*.cartocdn.com; " +
 			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none'; " +
 			"base-uri 'self'; " +
