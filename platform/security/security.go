@@ -19,7 +19,7 @@ func SecurityHeaders() gin.HandlerFunc {
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: https: blob:; " +
 			"font-src 'self' data:; " +
-			"connect-src 'self' https://nominatim.openstreetmap.org https://basemaps.cartocdn.com https://*.cartocdn.com; " +
+			"connect-src 'self' https://nominatim.openstreetmap.org https://basemaps.cartocdn.com https://*.cartocdn.com https://tiles.openfreemap.org; " +
 			"worker-src 'self' blob:; " +
 			"frame-ancestors 'none'; " +
 			"base-uri 'self'; " +
