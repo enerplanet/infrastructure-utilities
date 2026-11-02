@@ -68,6 +68,7 @@ type Model struct {
 const (
 	ModelStatusDraft      = contracts.StatusDraft
 	ModelStatusQueue      = contracts.StatusQueue
+	ModelStatusBuildings  = contracts.StatusBuildings
 	ModelStatusRunning    = contracts.StatusRunning
 	ModelStatusProcessing = contracts.StatusProcessing
 	ModelStatusCompleted  = contracts.StatusCompleted

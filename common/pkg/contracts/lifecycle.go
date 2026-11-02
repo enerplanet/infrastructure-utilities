@@ -10,6 +10,7 @@ const LifecycleAPIVersion = "v1"
 const (
 	StatusDraft      = "draft"
 	StatusQueue      = "queue"
+	StatusBuildings  = "buildings" // building demand profiles resolve before the model run
 	StatusRunning    = "running"
 	StatusProcessing = "processing"
 	StatusCompleted  = "completed"
@@ -21,7 +22,8 @@ const (
 // allowedTransitions is the model lifecycle state machine.
 var allowedTransitions = map[string]map[string]bool{
 	StatusDraft:      {StatusQueue: true, StatusCancelled: true},
-	StatusQueue:      {StatusRunning: true, StatusFailed: true, StatusCancelled: true},
+	StatusQueue:      {StatusBuildings: true, StatusRunning: true, StatusFailed: true, StatusCancelled: true},
+	StatusBuildings:  {StatusRunning: true, StatusFailed: true, StatusCancelled: true},
 	StatusRunning:    {StatusProcessing: true, StatusCompleted: true, StatusFailed: true, StatusCancelled: true},
 	StatusProcessing: {StatusCompleted: true, StatusFailed: true},
 	StatusCompleted:  {StatusPublished: true, StatusQueue: true}, // re-run allowed
