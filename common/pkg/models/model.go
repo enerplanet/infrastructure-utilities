@@ -51,6 +51,12 @@ type Model struct {
 
 	ParentModelTitle *string `gorm:"-" json:"parent_model_title,omitempty"`
 
+	// PyPSALegStatus is the model's PyPSA power-flow leg status (completed,
+	// failed, running, ...), populated by the API from model_meme_runs. Not a
+	// column; empty when the leg never ran. The dashboard hides the "Run power
+	// flow" action once it is "completed".
+	PyPSALegStatus string `gorm:"-" json:"pypsa_leg_status,omitempty"`
+
 	IsActive bool `gorm:"default:false" json:"is_active"`
 
 	CalculationStartedAt   *time.Time `json:"calculation_started_at,omitempty"`
